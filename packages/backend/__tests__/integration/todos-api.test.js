@@ -49,16 +49,31 @@ describe('TODO API integration tests', () => {
   });
 
   it('supports status filter endpoint', async () => {
-    await request(app)
+    const createCompleted = await request(app)
       .post('/api/tasks')
       .send({ title: 'Done task', completed: true })
       .set('Accept', 'application/json');
+    expect(createCompleted.status).toBe(201);
 
-    const response = await request(app).get('/api/tasks?status=completed');
+    const createActive = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'Active task', completed: false })
+      .set('Accept', 'application/json');
+    expect(createActive.status).toBe(201);
 
-    expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body.every((task) => task.completed === true)).toBe(true);
+    const completedResponse = await request(app).get('/api/tasks?status=completed');
+    const activeResponse = await request(app).get('/api/tasks?status=active');
+
+    expect(completedResponse.status).toBe(200);
+    expect(Array.isArray(completedResponse.body)).toBe(true);
+    expect(completedResponse.body.length).toBeGreaterThan(0);
+    expect(completedResponse.body.every((task) => task.completed === true)).toBe(true);
+    expect(completedResponse.body.some((task) => task.title === 'Done task')).toBe(true);
+
+    expect(activeResponse.status).toBe(200);
+    expect(activeResponse.body.every((task) => task.completed === false)).toBe(true);
+    expect(activeResponse.body.some((task) => task.title === 'Active task')).toBe(true);
+    expect(activeResponse.body.some((task) => task.title === 'Done task')).toBe(false);
   });
 
   it('rejects invalid payload and invalid id', async () => {
@@ -77,5 +92,15 @@ describe('TODO API integration tests', () => {
 
     expect(invalidUpdate.status).toBe(400);
     expect(invalidUpdate.body.error).toBe('Valid task ID is required');
+  });
+
+  it('returns 404 when updating a missing task', async () => {
+    const response = await request(app)
+      .put('/api/tasks/999999')
+      .send({ title: 'Missing task' })
+      .set('Accept', 'application/json');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Task not found');
   });
 });

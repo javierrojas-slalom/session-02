@@ -22,6 +22,11 @@ test.describe('TODO critical journeys', () => {
     await expect(todoPage.taskRow(taskTitle)).toBeVisible();
     await todoPage.toggleCompletionButton(taskTitle).click();
     await expect(todoPage.toggleCompletionButton(taskTitle)).toHaveText('Mark Active');
+
+    const completedApiResponse = await page.request.get('http://127.0.0.1:3030/api/tasks?status=completed');
+    expect(completedApiResponse.ok()).toBeTruthy();
+    const completedTasks = await completedApiResponse.json();
+    expect(completedTasks.some((task) => task.title === taskTitle && task.completed === true)).toBeTruthy();
   });
 
   test('edits and deletes a task', async ({ page }) => {
@@ -44,6 +49,11 @@ test.describe('TODO critical journeys', () => {
 
     await todoPage.deleteButton(updatedTitle).click();
     await expect(todoPage.taskRow(updatedTitle)).toHaveCount(0);
+
+    const allTasksApiResponse = await page.request.get('http://127.0.0.1:3030/api/tasks');
+    expect(allTasksApiResponse.ok()).toBeTruthy();
+    const allTasks = await allTasksApiResponse.json();
+    expect(allTasks.some((task) => task.title === updatedTitle)).toBeFalsy();
   });
 
   test('filters completed tasks only', async ({ page }) => {
