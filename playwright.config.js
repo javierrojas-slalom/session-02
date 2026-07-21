@@ -11,7 +11,7 @@ module.exports = defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run start --prefix /workspaces/session-02',
+    command: 'npm run start',
     url: 'http://127.0.0.1:3000',
     timeout: 120000,
     reuseExistingServer: true,
