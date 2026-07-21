@@ -1,102 +1,71 @@
-const request = require('supertest');
-const { app, db } = require('../src/app');
+const {
+  normalizeTaskInput,
+  parseTaskId,
+  normalizeStatusFilter,
+  isIsoDate,
+} = require('../src/taskValidation');
 
-// Close the database connection after all tests
-afterAll(() => {
-  if (db) {
-    db.close();
-  }
-});
+describe('taskValidation unit tests', () => {
+  describe('isIsoDate', () => {
+    it('accepts valid dates', () => {
+      expect(isIsoDate('2026-12-01')).toBe(true);
+    });
 
-// Test helpers
-const createItem = async (name = 'Temp Item to Delete') => {
-  const response = await request(app)
-    .post('/api/items')
-    .send({ name })
-    .set('Accept', 'application/json');
-
-  expect(response.status).toBe(201);
-  expect(response.body).toHaveProperty('id');
-  return response.body;
-};
-
-describe('API Endpoints', () => {
-  describe('GET /api/items', () => {
-    it('should return all items', async () => {
-      const response = await request(app).get('/api/items');
-
-      expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBeGreaterThan(0);
-
-      // Check if items have the expected structure
-      const item = response.body[0];
-      expect(item).toHaveProperty('id');
-      expect(item).toHaveProperty('name');
-      expect(item).toHaveProperty('created_at');
+    it('rejects invalid dates', () => {
+      expect(isIsoDate('2026-13-01')).toBe(false);
+      expect(isIsoDate('01-12-2026')).toBe(false);
     });
   });
 
-  describe('POST /api/items', () => {
-    it('should create a new item', async () => {
-      const newItem = { name: 'Test Item' };
-      const response = await request(app)
-        .post('/api/items')
-        .send(newItem)
-        .set('Accept', 'application/json');
+  describe('normalizeTaskInput', () => {
+    it('normalizes valid payload', () => {
+      const normalized = normalizeTaskInput({
+        title: '  Build tests  ',
+        description: '  Add coverage  ',
+        dueDate: '2026-08-01',
+        completed: false,
+      });
 
-      expect(response.status).toBe(201);
-      expect(response.body).toHaveProperty('id');
-      expect(response.body.name).toBe(newItem.name);
-      expect(response.body).toHaveProperty('created_at');
+      expect(normalized.ok).toBe(true);
+      expect(normalized.task).toEqual({
+        title: 'Build tests',
+        description: 'Add coverage',
+        dueDate: '2026-08-01',
+        completed: false,
+      });
     });
 
-    it('should return 400 if name is missing', async () => {
-      const response = await request(app)
-        .post('/api/items')
-        .send({})
-        .set('Accept', 'application/json');
-
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error');
-      expect(response.body.error).toBe('Item name is required');
+    it('rejects empty title', () => {
+      const normalized = normalizeTaskInput({ title: '   ' });
+      expect(normalized).toEqual({ ok: false, error: 'Task title is required' });
     });
 
-    it('should return 400 if name is empty', async () => {
-      const response = await request(app)
-        .post('/api/items')
-        .send({ name: '' })
-        .set('Accept', 'application/json');
-
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error');
-      expect(response.body.error).toBe('Item name is required');
+    it('rejects invalid due date format', () => {
+      const normalized = normalizeTaskInput({ title: 'Task', dueDate: '08/01/2026' });
+      expect(normalized).toEqual({ ok: false, error: 'Due date must use YYYY-MM-DD format' });
     });
   });
 
-  describe('DELETE /api/items/:id', () => {
-    it('should delete an existing item', async () => {
-      const item = await createItem('Item To Be Deleted');
-
-      const deleteResponse = await request(app).delete(`/api/items/${item.id}`);
-      expect(deleteResponse.status).toBe(200);
-      expect(deleteResponse.body).toEqual({ message: 'Item deleted successfully', id: item.id });
-
-      const deleteAgain = await request(app).delete(`/api/items/${item.id}`);
-      expect(deleteAgain.status).toBe(404);
-      expect(deleteAgain.body).toHaveProperty('error', 'Item not found');
+  describe('parseTaskId', () => {
+    it('accepts valid numeric ids', () => {
+      expect(parseTaskId('12')).toEqual({ ok: true, id: 12 });
     });
 
-    it('should return 404 when item does not exist', async () => {
-      const response = await request(app).delete('/api/items/999999');
-      expect(response.status).toBe(404);
-      expect(response.body).toHaveProperty('error', 'Item not found');
+    it('rejects invalid ids', () => {
+      expect(parseTaskId('abc')).toEqual({ ok: false, error: 'Valid task ID is required' });
+      expect(parseTaskId('-1')).toEqual({ ok: false, error: 'Valid task ID is required' });
+    });
+  });
+
+  describe('normalizeStatusFilter', () => {
+    it('maps unsupported filter to all', () => {
+      expect(normalizeStatusFilter('anything')).toBe('all');
+      expect(normalizeStatusFilter(undefined)).toBe('all');
     });
 
-    it('should return 400 for invalid id', async () => {
-      const response = await request(app).delete('/api/items/abc');
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Valid item ID is required');
+    it('supports active and completed', () => {
+      expect(normalizeStatusFilter('active')).toBe('active');
+      expect(normalizeStatusFilter('completed')).toBe('completed');
     });
   });
 });
